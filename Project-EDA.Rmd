@@ -1,0 +1,83 @@
+---
+title: "Project EDA Visualization"
+author: "Akithma Fernando"
+date: "2024-10-18"
+output: html_document
+---
+
+Time-Series Plot for the full Dataset
+
+```{r}
+# Load the packages
+library(ggplot2)
+library(scales)
+
+# Read the CSV file
+data <- read.csv("D:/Downloads/Coconut_Production.csv")
+
+# Convert 'Time' to a year-month date object 
+data$Time <- as.Date(paste0(data$Time, "-01"), format = "%Y-%m-%d")
+
+year_breaks <- seq(as.Date("2000-01-01"), as.Date("2024-01-01"), by = "1 years")
+
+# Plot time series 
+ggplot(data, aes(x = Time, y = Production)) +
+  geom_line(color = "blue") +
+  labs(title = "Monthly Coconut Production in Sri Lanka Over Time (2000-2024)", x = "Time", y = "Production (Millions)") +
+  scale_x_date(breaks = year_breaks, date_labels = "%Y") +  
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))  
+```
+
+Time-Series Plot for the Training Data ( after splitting)
+
+```{r}
+test_set <- tail(data, 12)
+train_set <- head(data, nrow(data) - 12)
+
+year_breaks <- seq(min(train_set$Time), max(train_set$Time), by = "1 years")
+
+# Plot the time series
+ggplot(train_set, aes(x = Time, y = Production)) +
+  geom_line(color = "blue") +
+  labs(title = "Monthly Coconut Production in Sri Lanka Over Time (Training Data)", x = "Time", y = "Production (Millions)") +
+  scale_x_date(breaks = year_breaks, date_labels = "%Y") +  # Custom breaks for every 2 years
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+ACF Plot
+
+```{r}
+train_production <- train_set$Production  
+
+# Plot the ACF   
+acf(train_production, lag.max = 72, main = "Autocorrelation Function for monthly Coconut Production (Training Data)",   
+    xaxt = "n")  
+axis(1, at = seq(0, 72, by = 12), labels = seq(0, 72, by = 12))  
+```
+
+Yearly Average Production graph
+
+```{r}
+library(dplyr)
+
+train_set$Month <- format(train_set$Time, "%B")  # Extracts the month name
+
+# Calculate the average production for each month in the training data
+monthly_avg <- train_set %>%
+  group_by(Month) %>%
+  summarise(Average_Production = mean(Production, na.rm = TRUE))
+
+# Reorder the months so they appear in calendar order
+monthly_avg$Month <- factor(monthly_avg$Month, levels = month.name)
+
+# Plot the average production for each month in the training data
+ggplot(monthly_avg, aes(x = Month, y = Average_Production)) +
+  geom_line(group = 1, color = "blue") +
+  geom_point(color = "blue") +
+  labs(title = "Average Coconut Production by Month in Sri Lanka (Training Data)", x = "Month", y = "Average Production (Millions)") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))  
+```
+
