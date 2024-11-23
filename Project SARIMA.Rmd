@@ -1,0 +1,176 @@
+---
+title: "SARIMA Model"
+author: "Akithma Fernando"
+date: "2024-11-14"
+output: html_document
+---
+
+
+```{r}
+# Load necessary libraries
+library(forecast)
+library(ggplot2)
+
+# Read the data
+data <- read.csv("D:/Downloads/Coconut_Production.csv")
+
+data$Time <- as.Date(paste0(data$Time, "-01"), format = "%Y-%m-%d")
+
+
+```
+```{r}
+# Split the data into training and test sets
+test_set <- tail(data, 12)
+train_set <- head(data, nrow(data) - 12)
+
+```
+
+```{r}
+# Convert Time column to Date type in both sets
+train_set$Time <- as.Date(train_set$Time)
+test_set$Time <- as.Date(test_set$Time)
+
+# Create time series objects for training and test sets
+start_date_train <- c(as.numeric(format(min(train_set$Time), "%Y")), 
+                      as.numeric(format(min(train_set$Time), "%m")))
+
+Coconut_production_ts <- ts(train_set$Production, 
+                          start = start_date_train, frequency = 12)
+
+start_date_test <- c(as.numeric(format(min(test_set$Time), "%Y")), 
+                     as.numeric(format(min(test_set$Time), "%m")))
+
+Coconut_production_ts_test <- ts(test_set$Production, 
+                              start = start_date_test, frequency = 12)
+```
+
+```{r}
+Coconut_production_diff1 <- diff(Coconut_production_ts, lag = 1)
+acf(Coconut_production_diff1, lag.max = 72)
+pacf(Coconut_production_diff1, lag.max = 72)
+```
+
+
+```{r}
+Coconut_SEA_DIFF1 <- diff(Coconut_production_diff1, 12)
+acf(Coconut_SEA_DIFF1, lag.max = 72)
+pacf(Coconut_SEA_DIFF1, lag.max = 72)
+```
+
+```{r}
+# Model building
+best_model_C <- auto.arima(Coconut_production_ts, d = 1, D = 1,
+                          start.p = 1, start.q = 1, start.P = 3, start.Q = 1, 
+                          seasonal = TRUE, stepwise = FALSE, approximation = FALSE, 
+                          ic = "aic", method = "ML")
+summary(best_model_C)
+```
+
+```{r}
+# Extract residuals and perform Ljung-Box test
+residuals_C <- residuals(best_model_C)
+ljung_box_test_C <- Box.test(residuals_C, lag = 20, type = "Ljung-Box")
+ljung_box_test_C
+
+# Plotting residuals, ACF, and PACF
+autoplot(residuals_C) +
+  ggtitle("Residuals from ARIMA (0, 1, 1)(2, 1, 1)[12] Model") +
+  xlab("Time") + ylab("Residuals")
+
+par(mfrow = c(2, 1)) 
+acf(residuals_C, main = "ACF of Residuals")
+pacf(residuals_C, main = "PACF of Residuals") 
+par(mfrow = c(1, 1))
+```
+
+```{r}
+# Normality check
+par(mfrow = c(1, 2))
+hist(residuals_C, breaks = 20, main = "Histogram of Residuals", xlab = "Residuals", col = "lightblue")
+qqnorm(residuals_C, main = "Q-Q Plot of Residuals")
+qqline(residuals_C, col = "red")
+par(mfrow = c(1, 1))
+
+shapiro.test(residuals_C)
+library(nortest)
+ad.test(residuals_C)
+```
+
+```{r}
+# Checking for constant variance in residuals
+autoplot(residuals_C, main = "Variation of Residuals Over Time", xlab = "Time", ylab = "Residuals")
+```
+
+```{r}
+# Forecasting for the test set period
+forecast_values_Coconut <- forecast(best_model_C, h = length(Coconut_production_ts_test))
+
+```
+
+```{r}
+# Plotting forecast vs actual values
+autoplot(forecast_values_Coconut) +
+  autolayer(Coconut_production_ts_test, series = "Actual Test Data", PI = FALSE) +
+  ggtitle("Forecast vs Actual for Coconut Production") +
+  xlab("Year") + ylab("Coconut Production") +
+  theme_minimal()
+```
+
+```{r}
+# Calculating MAPE
+forecasted_values_Coconut <- forecast_values_Coconut$mean
+actual_values_Coconut <- Coconut_production_ts_test
+
+calculate_mape_Coconut <- function(actual, forecast) {
+  return(mean(abs((actual - forecast) / actual) * 100))
+}
+
+mape_Coconut <- calculate_mape_Coconut(actual_values_Coconut, forecasted_values_Coconut)
+print(paste("Mean Absolute Percentage Error (MAPE):", round(mape_Coconut, 2), "%"))
+
+# Calculate RMSE
+
+calculate_rmse_Coconut <- function(actual_values_Coconut, forecasted_values_Coconut) {
+  sqrt(mean((actual_values_Coconut - forecasted_values_Coconut)^2))
+}
+
+rmse_Coconut <- calculate_rmse_Coconut(actual_values_Coconut, forecasted_values_Coconut)
+print(paste("Root Mean Squared Error (RMSE):", round(rmse_Coconut, 2)))
+
+```
+
+```{r}
+# Plotting actual vs forecasted values on the test set
+time_index_Coconut <- time(Coconut_production_ts_test)
+plot_data <- data.frame(
+  Time = time_index_Coconut,
+  Actual = actual_values_Coconut,
+  Forecast = forecasted_values_Coconut
+)
+
+ggplot(plot_data, aes(x = Time)) +
+  geom_line(aes(y = Actual), color = "blue", size = 1) +
+  geom_line(aes(y = Forecast), color = "red", size = 1, linetype = "dashed") +
+  ggtitle("Actual vs Forecasted Coconut Production") +
+  xlab("Time") + ylab("Coconut Production") +
+  theme_minimal() +
+  theme(legend.position = "none") 
+```
+
+```{r}
+# Forecasting for the next 3 months
+forecast_values_Coconut_3months <- forecast(best_model_C, h = 15)
+forecast_values_Coconut_3months
+```
+
+```{r}
+# Calculating original MAPE
+Coco_LOG_ForecastVAL <- forecast(best_model_C, h = 12)
+forecasted_values_coco_ori <- exp(Coco_LOG_ForecastVAL$mean)
+actual_values_cocoori <- Coconut_production_ts_test
+
+mape_coco_ori <- mean(abs((actual_values_cocoori - forecasted_values_coco_ori) / actual_values_cocoori)) * 100
+print(paste("Original Mean Absolute Percentage Error (MAPE):", round(mape_coco_ori, 2), "%"))
+
+```
+
